@@ -51,7 +51,7 @@ module.exports = {
                 { name: 'Причина', value: reason }
             )
             .setTimestamp()
-            .setFooter({ text: 'HR Audit by Hennesy' });
+            .setFooter({ text: 'HR Audit by Hennessy' });
 
         await interaction.reply({ embeds: [rankEmbed] });
     }
