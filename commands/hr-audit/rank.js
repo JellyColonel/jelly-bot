@@ -11,12 +11,12 @@ module.exports = {
                 .setRequired(true))
         .addIntegerOption(option =>
             option
-                .setName('current rank')
+                .setName('currentrank')
                 .setDescription('Текущий ранг участника')
                 .setRequired(true))
         .addIntegerOption(option =>
             option
-                .setName('new rank')
+                .setName('newrank')
                 .setDescription('Новый ранг')
                 .setRequired(true))
         .addStringOption(option =>
@@ -24,34 +24,35 @@ module.exports = {
                 .setName('reason')
                 .setDescription('Причина изменения ранга')
                 .setRequired(true))
-        .addIntegerOption(option =>
+        .addStringOption(option =>
             option
-                .setName('Static ID')
+                .setName('staticid')
                 .setDescription('Static ID участника которому изменяют ранг')
                 .setRequired(true)),
 
     async execute(interaction) {
-        const authorDisplayName = interaction.user.displayName;
-        const memberDisplayName = interaction.options.getUser('member').displayName;
-        const currentRank = interaction.options.getInteger('current rank');
-        const newRank = interaction.options.getInteger('new rank');
-        const staticId = interaction.options.getInteger('Static ID');
+        const author = interaction.user
+        const affectedUser = interaction.options.getUser('member')
+        const currentRank = interaction.options.getInteger('currentrank');
+        const newRank = interaction.options.getInteger('newrank');
+        const staticId = interaction.options.getString('staticid');
         const action = currentRank < newRank ? `Повышен(-а) с ${currentRank} на ${newRank} ранг` : `Понижен(-а) с ${currentRank} на ${newRank} ранг`;
+        const reason = interaction.options.getString('reason');
 
         const rankEmbed = new EmbedBuilder()
-            .setColor('0x0099FF')
+            .setColor(39423)
             .setTitle('Кадровый аудит • Изменение ранга')
             .addFields(
-                { name: 'Обновил(-а) ранг:', value: authorDisplayName },
-                { name: '\u200B', value: '\u200B' },
-                { name: 'Обновлен(-а)', value: memberDisplayName },
-                { name: '\u200B', value: '\u200B' },
+                { name: 'Обновил(-а) ранг', value: `<@${author.id}> | ${author.displayName} | ||${author.id}||` },
+                { name: 'Обновлен(-а)', value: `<@${affectedUser.id}> | ${affectedUser.displayName} | ||${affectedUser.id}||` },
                 { name: 'Номер паспорта', value: staticId, inline: true },
-                { name: 'Действие', value: action, inline: true }
+                { name: '\u200B', value: '\u200B', inline: true },
+                { name: 'Действие', value: action, inline: true },
+                { name: 'Причина', value: reason }
             )
             .setTimestamp()
-            .setFooter({ text: 'HR Audit by Hennesy' })
+            .setFooter({ text: 'HR Audit by Hennesy' });
 
-        await interaction.repy({ embdes: [rankEmbed] });
+        await interaction.reply({ embeds: [rankEmbed] });
     }
 }
