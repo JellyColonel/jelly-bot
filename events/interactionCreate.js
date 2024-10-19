@@ -1,5 +1,4 @@
-const { Events, Collection, ReactionType } = require('discord.js');
-const { cooldown } = require('../commands/utility/ping');
+const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, Events, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 
 module.exports = {
     name: Events.InteractionCreate,
@@ -12,29 +11,6 @@ module.exports = {
                 return;
             }
 
-            const { cooldowns } = interaction.client;
-
-            if (!cooldowns.has(command.data.name)) {
-                cooldowns.set(command.data.name, new Collection());
-            }
-
-            const now = Date.now();
-            const timestamps = cooldowns.get(command.data.name);
-            const defaultCooldownDuration = 3;
-            const cooldownAmount = (command.cooldown ?? defaultCooldownDuration) * 1_000;
-
-            if (timestamps.has(interaction.user.id)) {
-                const expirationTime = timestamps.get(interaction.user.id) + cooldownAmount;
-
-                if (now < expirationTime) {
-                    const expiredTimestamp = Math.round(expirationTime / 1_000);
-                    return interaction.reply({ content: `Please wait, you are on a cooldown for \`${command.data.name}\`. You can user it again <t:${expiredTimestamp}:R`, ephemeral: true });
-                }
-            }
-
-            timestamps.set(interaction.user.id, now);
-            setTimeout(() => timestamps.delete(interaction.user.id), cooldownAmount);
-
             try {
                 await command.execute(interaction);
             } catch (error) {
@@ -45,22 +21,88 @@ module.exports = {
                     await interaction.reply({ content: 'There was an error while executing this command!', ephemeral: true });
                 }
             }
+        } else if (interaction.isStringSelectMenu()) {
+            console.log(interaction);
+            const rankModal = new ModalBuilder()
+                .setCustomId('rankReportModal')
+                .setTitle("Отчёт на повышение | FD")
 
-        } else if (interaction.isAutocomplete()) {
+            // Create the text input components
+            const nameAndStaticInput = new TextInputBuilder()
+                .setCustomId('nameAndStaticInput')
+                // The label is the prompt the user sees for this input
+                .setLabel('Ваши имя и Static ID')
+                // Placeholder text
+                .setPlaceholder('Формат: Имя Фамилия | Static ID')
+                // Short means only a single line of text
+                .setStyle(TextInputStyle.Short)
+                // Is input required
+                .setRequired(true);
 
-            const command = interaction.client.commands.get(interaction.commandName);
+            const mainActivitiesReport = new TextInputBuilder()
+                .setCustomId('mainActivitiesReport')
+                .setLabel("Пожары и гос. проверки")
+                .setPlaceholder('Отчёт о пожарах и пожарных проверках')
+                .setStyle(TextInputStyle.Paragraph)
+                .setRequired(true);
 
-            if (!command) {
-                console.error(`No command matching ${interaction.commandName} was found.`);
-                return;
+            // Add action row
+            // One action row can hold only one text input
+            const firstActionRow = new ActionRowBuilder().addComponents(nameAndStaticInput);
+            const secondActionRow = new ActionRowBuilder().addComponents(mainActivitiesReport);
+
+            // Add inputs to the modal
+            rankModal.addComponents(firstActionRow, secondActionRow);
+
+            // Show the modal to the user
+            await interaction.showModal(rankModal);
+        } else if (interaction.isModalSubmit()) {
+            const nameAndStatic = interaction.fields.getTextInputValue('nameAndStaticInput');
+            const mainActivitiesReport = interaction.fields.getTextInputValue('mainActivitiesReport')
+
+            const rankEmbed = new EmbedBuilder()
+                .setColor(39423)
+                .setTitle('Кадровый аудит • Изменение ранга')
+                .addFields(
+                    { name: 'Имя Фамилия | Static ID', value: nameAndStatic },
+                    { name: 'Отправленная информация', value: mainActivitiesReport },
+                )
+                .setTimestamp()
+                .setFooter({ text: 'HR Audit by Hennessy' });
+
+            const acceptButton = new ButtonBuilder()
+                .setCustomId('acceptReport')
+                .setLabel('Принять')
+                .setStyle(ButtonStyle.Success)
+                .setEmoji('👍');
+
+            const rejectButton = new ButtonBuilder()
+                .setCustomId("rejectReport")
+                .setLabel('Отклонить')
+                .setStyle(ButtonStyle.Danger)
+                .setEmoji('👎');
+
+            const row = new ActionRowBuilder()
+                .addComponents(acceptButton, rejectButton);
+
+            const channel = interaction.client.channels.cache.get('1297185384148766741')
+
+            await channel.send({
+                embeds: [rankEmbed],
+                components: [row]
+            });
+            interaction.deferUpdate()
+        } else if (interaction.isButton()) {
+            if (interaction.customId === 'acceptReport') {
+                interaction.deferUpdate();
+            } else if (interaction.customId === 'rejectReport') {
+
+            } else {
+                interaction.reply({
+                    content: 'Эта кнопка пока не работает',
+                    ephemeral: true
+                })
             }
-
-            try {
-                await command.autocomplete(interaction);
-            } catch (error) {
-                console.error(error);
-            }
-
         }
     },
 };
