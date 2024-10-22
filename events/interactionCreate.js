@@ -46,6 +46,9 @@ module.exports = {
                 .setStyle(TextInputStyle.Paragraph)
                 .setRequired(true);
 
+            const sideActivitiesReport = new TextInputBuilder()
+            
+
             // Add action row
             // One action row can hold only one text input
             const firstActionRow = new ActionRowBuilder().addComponents(nameAndStaticInput);
