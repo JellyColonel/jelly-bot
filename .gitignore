@@ -1,3 +1,19 @@
-node_modules
-config.json
+# Dependencies
+node_modules/
+
+# Environment variables
 .env
+
+# Logs
+logs/
+*.log
+
+# IDE specific files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS specific files
+.DS_Store
+Thumbs.db
