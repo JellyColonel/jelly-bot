@@ -1,59 +1,126 @@
 require('dotenv').config();
+const logger = require('../utils/logger');
 
+/**
+ * Validates and formats a Discord role ID
+ * @param {string} roleId
+ * @returns {string|null}
+ */
+const validateRoleId = (roleId) => {
+  if (!roleId) return null;
+  const cleaned = roleId.trim();
+  return cleaned.length > 0 ? cleaned : null;
+};
+
+/**
+ * Processes role references and returns resolved role IDs
+ * @param {string} roleIdsString - Comma-separated role IDs or references
+ * @param {Object} allRoles - Available role configurations
+ * @returns {string[]}
+ */
 const parseRoleIds = (roleIdsString, allRoles = {}) => {
+  if (!roleIdsString) {
+    logger.warn('No role IDs provided');
+    return [];
+  }
+
   return roleIdsString
     .split(',')
     .map((item) => item.trim())
     .reduce((acc, item) => {
-      // If item starts with @, it's a reference to another role config
       if (item.startsWith('@')) {
-        const refKey = item.slice(1); // Remove @ symbol
+        const refKey = item.slice(1);
         const referencedRoles = allRoles[refKey];
+
         if (referencedRoles) {
-          // If it's already an array, spread it; if not, add as single item
-          return acc.concat(
-            Array.isArray(referencedRoles) ? referencedRoles : [referencedRoles]
-          );
-        } else {
-          console.warn(
-            `Warning: Referenced role '${refKey}' not found in configuration`
-          );
-          return acc;
+          const resolvedRoles = Array.isArray(referencedRoles)
+            ? referencedRoles
+            : [referencedRoles];
+
+          logger.info(`Resolved role reference: @${refKey}`, {
+            resolved: resolvedRoles,
+          });
+
+          return acc.concat(resolvedRoles);
         }
+
+        logger.warn(`Referenced role not found: ${refKey}`);
+        return acc;
       }
-      // Regular role ID
+
       return acc.concat(item);
     }, [])
-    .filter((id) => id.length > 0);
+    .filter((id) => {
+      const isValid = id && id.length > 0;
+      if (!isValid) {
+        logger.warn(`Invalid role ID found: ${id}`);
+      }
+      return isValid;
+    });
 };
 
-// First, collect all individual role configurations
+// Role configurations
 const roleConfigs = {
-  SENIOR_STAFF_ROLE_ID: process.env.SENIOR_STAFF_ROLE_ID,
-  MANAGEMENT_STAFF_ROLE_ID: process.env.MANAGEMENT_STAFF_ROLE_ID,
-  // Add any other role configurations here
+  SENIOR_STAFF_ROLE_ID: validateRoleId(process.env.SENIOR_STAFF_ROLE_ID),
+  MANAGEMENT_STAFF_ROLE_ID: validateRoleId(
+    process.env.MANAGEMENT_STAFF_ROLE_ID
+  ),
 };
 
+// Discord-specific configuration
+const discordConfig = {
+  token: process.env.DISCORD_TOKEN,
+  reportsChannelId: process.env.REPORTS_CHANNEL_ID,
+  requiredRoleIds: parseRoleIds(process.env.REQUIRED_ROLE_IDS, roleConfigs),
+  highRanksRole: validateRoleId(process.env.SENIOR_STAFF_ROLE_ID),
+  promotionChannelId: process.env.PROMOTION_CHANNEL_ID,
+};
+
+// Embed configuration with defaults
+const embedConfig = {
+  title: process.env.EMBED_TITLE || 'Отчёт на повышение | Отдел неизвестен',
+  url: process.env.EMBER_URL || null,
+  color: process.env.EMBED_COLOR
+    ? parseInt(process.env.EMBED_COLOR.replace('#', ''), 16)
+    : 0x5865f2, // Discord Blurple as default
+  footerText: process.env.EMBED_FOOTER || 'Отправлено в ',
+  imageUrl: process.env.EMBED_IMAGE_URL || null,
+};
+
+// Server configuration
+const serverConfig = {
+  port: parseInt(process.env.PORT, 10) || 3000,
+};
+
+// Validate critical configuration
+const validateConfig = () => {
+  const required = {
+    'Discord Token': discordConfig.token,
+    'Reports Channel ID': discordConfig.reportsChannelId,
+    'Promotion Channel ID': discordConfig.promotionChannelId,
+  };
+
+  const missing = Object.entries(required)
+    .filter(([, value]) => !value)
+    .map(([key]) => key);
+
+  if (missing.length > 0) {
+    logger.error(`Missing required configuration: ${missing.join(', ')}`);
+    process.exit(1);
+  }
+
+  if (discordConfig.requiredRoleIds.length === 0) {
+    logger.warn('No required role IDs configured');
+  }
+};
+
+// Run validation
+validateConfig();
+
+// Export configuration
 module.exports = {
-  discord: {
-    token: process.env.DISCORD_TOKEN,
-    reportsChannelId: process.env.REPORTS_CHANNEL_ID,
-    // Now you can use references in REQUIRED_ROLE_ID
-    requiredRoleIds: parseRoleIds(process.env.REQUIRED_ROLE_IDS, roleConfigs),
-    highRanksRole: process.env.SENIOR_STAFF_ROLE_ID,
-    promotionChannelId: process.env.PROMOTION_CHANNEL_ID,
-  },
-  server: {
-    port: process.env.PORT || 3000,
-  },
-  embed: {
-    title: process.env.EMBED_TITLE || 'Отчёт на повышение | Отдел неизвестен',
-    url: process.env.EMBER_URL || null,
-    color: process.env.EMBED_COLOR,
-    footerText: process.env.EMBED_FOOTER || 'Отправлено в ',
-    imageUrl: process.env.EMBED_IMAGE_URL || null,
-  },
-  server: {
-    port: process.env.PORT || 3000,
-  },
+  discord: discordConfig,
+  server: serverConfig,
+  embed: embedConfig,
+  roles: roleConfigs,
 };
