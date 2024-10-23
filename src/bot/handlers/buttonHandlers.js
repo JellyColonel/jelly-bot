@@ -73,7 +73,7 @@ class ButtonHandlers {
       const promotionFormat = [
         `1. ${authorMention} ${formattedDisplayName}`,
         `2. ${this.formatRoleMention(config.discord.highRanksRole)}`,
-        `3. ${currentRank} - ${newRank}`,
+        `3. ${currentRank}-${newRank}`,
         `4. ${message.url}`,
       ].join('\n');
 

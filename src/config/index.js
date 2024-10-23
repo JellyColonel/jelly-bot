@@ -62,9 +62,9 @@ const parseRoleIds = (roleIdsString, allRoles = {}) => {
 // Role configurations
 const roleConfigs = {
   SENIOR_STAFF_ROLE_ID: validateRoleId(process.env.SENIOR_STAFF_ROLE_ID),
-  MANAGEMENT_STAFF_ROLE_ID: validateRoleId(
-    process.env.MANAGEMENT_STAFF_ROLE_ID
-  ),
+  FD_CURATOR_ROLE_ID: validateRoleId(process.env.FD_CURATOR_ROLE_ID),
+  FD_HEAD_ROLE_ID: validateRoleId(process.env.FD_HEAD_ROLE_ID),
+  FD_DEP_HEAD_ROLE_ID: validateRoleId(process.env.FD_DEP_HEAD_ROLE_ID),
 };
 
 // Discord-specific configuration
@@ -80,9 +80,7 @@ const discordConfig = {
 const embedConfig = {
   title: process.env.EMBED_TITLE || 'Отчёт на повышение | Отдел неизвестен',
   url: process.env.EMBER_URL || null,
-  color: process.env.EMBED_COLOR
-    ? parseInt(process.env.EMBED_COLOR.replace('#', ''), 16)
-    : 0x5865f2, // Discord Blurple as default
+  color: process.env.EMBED_COLOR,
   footerText: process.env.EMBED_FOOTER || 'Отправлено в ',
   imageUrl: process.env.EMBED_IMAGE_URL || null,
 };
