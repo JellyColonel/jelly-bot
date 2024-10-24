@@ -1,6 +1,8 @@
-const { Client, GatewayIntentBits } = require('discord.js');
+const { Client, GatewayIntentBits, Events } = require('discord.js');
 const config = require('../config');
 const logger = require('../utils/logger');
+const scheduler = require('../services/schedulerService');
+const dbManager = require('../database');
 
 const client = new Client({
   intents: [
@@ -10,8 +12,32 @@ const client = new Client({
   ],
 });
 
+// Initialize database before bot starts
+const initServices = async () => {
+  try {
+    logger.info('Initializing services...');
+    await dbManager.init();
+    logger.info('Database initialized');
+  } catch (error) {
+    logger.error('Failed to initialize services:', error);
+    process.exit(1);
+  }
+};
+
+client.once(Events.ClientReady, () => {
+  logger.info(`Logged in as ${client.user.tag}`);
+  scheduler.start();
+});
+
+client.on(Events.Error, (error) => {
+  logger.error('Discord client error:', {
+    error: error.message,
+    stack: error.stack,
+  });
+});
+
 // Register the interactionCreate event
-client.on('interactionCreate', async (interaction) => {
+client.on(Events.InteractionCreate, async (interaction) => {
   try {
     // Import and execute the interaction handler
     const interactionHandler = require('./events/interactionCreate');
@@ -36,20 +62,41 @@ client.on('interactionCreate', async (interaction) => {
   }
 });
 
-client.once('ready', () => {
-  logger.info(`Logged in as ${client.user.tag}`);
+// Graceful shutdown handler
+process.on('SIGINT', async () => {
+  logger.info('Shutting down...');
+
+  // Stop the scheduler
+  scheduler.stop();
+
+  // Close database connection
+  await dbManager.close();
+
+  // Destroy the client
+  client.destroy();
+
+  logger.info('Cleanup completed');
+  process.exit(0);
 });
 
-client.on('error', (error) => {
-  logger.error('Discord client error:', {
-    error: error.message,
-    stack: error.stack,
-  });
+// Optional: Handle other termination signals
+process.on('SIGTERM', async () => {
+  logger.info('Received SIGTERM signal');
+  process.emit('SIGINT');
 });
 
-client
-  .login(config.discord.token)
-  .then(() => logger.info('Bot logged in successfully'))
-  .catch((err) => logger.error('Failed to log in:', err));
+// Start bot and services
+const startBot = async () => {
+  try {
+    await initServices();
+    await client.login(config.discord.token);
+    logger.info('Bot logged in successfully');
+  } catch (error) {
+    logger.error('Failed to start bot:', error);
+    process.exit(1);
+  }
+};
+
+startBot();
 
 module.exports = client;

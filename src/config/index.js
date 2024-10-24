@@ -85,6 +85,10 @@ const embedConfig = {
   imageUrl: process.env.EMBED_IMAGE_URL || null,
 };
 
+const formConfig = {
+  rankFieldIdentifier: process.env.RANK_FIELD_IDENTIFIER,
+};
+
 // Server configuration
 const serverConfig = {
   port: parseInt(process.env.PORT, 10) || 3000,
@@ -121,4 +125,5 @@ module.exports = {
   server: serverConfig,
   embed: embedConfig,
   roles: roleConfigs,
+  form: formConfig,
 };
