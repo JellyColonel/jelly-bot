@@ -1,7 +1,7 @@
 const { Client, GatewayIntentBits, Events } = require('discord.js');
 const config = require('../config');
 const logger = require('../utils/logger');
-const scheduler = require('../services/schedulerService');
+const SchedulerService = require('../services/schedulerService');
 const dbManager = require('../database');
 
 const client = new Client({
@@ -11,6 +11,9 @@ const client = new Client({
     GatewayIntentBits.GuildMessageReactions,
   ],
 });
+
+// Create scheduler instance
+let scheduler = null;
 
 // Initialize database before bot starts
 const initServices = async () => {
@@ -26,6 +29,9 @@ const initServices = async () => {
 
 client.once(Events.ClientReady, () => {
   logger.info(`Logged in as ${client.user.tag}`);
+
+  // Initialize scheduler
+  scheduler = new SchedulerService(client);
   scheduler.start();
 });
 
@@ -66,8 +72,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
 process.on('SIGINT', async () => {
   logger.info('Shutting down...');
 
-  // Stop the scheduler
-  scheduler.stop();
+  // Stop the scheduler if it exists
+  if (scheduler) {
+    scheduler.stop();
+  }
 
   // Close database connection
   await dbManager.close();

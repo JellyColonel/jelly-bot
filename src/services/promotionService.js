@@ -29,7 +29,7 @@ class PromotionService {
     }
   }
 
-  static async schedulePromotion(userId, fromRank, toRank, messageId) {
+  static async schedulePromotion(userId, guildId, fromRank, toRank, reportUrl) {
     try {
       const nextMidnight = new Date();
       nextMidnight.setDate(nextMidnight.getDate() + 1);
@@ -37,26 +37,28 @@ class PromotionService {
 
       const query = dbManager.db.prepare(`
         INSERT INTO promotions (
-          user_id, 
-          promotion_time, 
-          from_rank, 
-          to_rank, 
-          message_id, 
+          user_id,
+          guild_id,
+          promotion_time,
+          from_rank,
+          to_rank,
+          report_url,
           processed,
           scheduled_for
-        ) VALUES (?, ?, ?, ?, ?, FALSE, ?);
+        ) VALUES (?, ?, ?, ?, ?, ?, FALSE, ?);
       `);
 
       query.run(
         userId,
+        guildId,
         new Date().toISOString(),
         fromRank,
         toRank,
-        messageId,
+        reportUrl,
         nextMidnight.toISOString()
       );
 
-      return { scheduledTime: nextMidnight }; // Remove delay from return
+      return { scheduledTime: nextMidnight };
     } catch (error) {
       logger.error('Error scheduling promotion:', error);
       throw error;

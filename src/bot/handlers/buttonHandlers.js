@@ -1,6 +1,7 @@
 // src/bot/handlers/buttonHandlers.js
 const { ButtonBuilder, ActionRowBuilder, ButtonStyle } = require('discord.js');
 const PromotionService = require('../../services/promotionService');
+const PromotionMessageService = require('../../services/promotionMessageService');
 const config = require('../../config');
 const logger = require('../../utils/logger');
 
@@ -61,12 +62,14 @@ class ButtonHandlers {
 
       if (!canPromote) {
         logger.info('Scheduling delayed promotion', { authorId });
+
         // Schedule for next day
         const { scheduledTime } = await PromotionService.schedulePromotion(
           authorId,
+          interaction.guildId, // Add guild ID
           currentRank,
           newRank,
-          message.id
+          message.url // Add report URL
         );
 
         logger.info('Creating delay thread');
@@ -90,34 +93,14 @@ class ButtonHandlers {
         return;
       }
 
-      logger.info('Fetching promotion channel');
-      const promotionChannel = await interaction.guild.channels.fetch(
-        config.discord.promotionChannelId
-      );
-      if (!promotionChannel) {
-        logger.error('Promotion channel not found', {
-          channelId: config.discord.promotionChannelId,
-        });
-        throw new Error('Could not find promotion channel');
-      }
-
-      logger.info('Fetching author member');
-      const authorMember = await interaction.guild.members.fetch(authorId);
-      logger.info('Formatting display name');
-      const formattedDisplayName = this.formatDisplayName(
-        authorMember.displayName
-      );
-
-      logger.info('Creating promotion format');
-      const promotionFormat = [
-        `1. <@${authorId}> ${formattedDisplayName}`,
-        `2. ${this.formatRoleMention(config.discord.highRanksRole)}`,
-        `3. ${currentRank}-${newRank}`,
-        `4. ${message.url}`,
-      ].join('\n');
-
-      logger.info('Sending promotion message');
-      const promotionMessage = await promotionChannel.send(promotionFormat);
+      const promotionMessage =
+        await PromotionMessageService.sendPromotionRequest(
+          interaction.guild,
+          authorId,
+          currentRank,
+          newRank,
+          message.url
+        );
 
       logger.info('Creating acceptance thread');
       const thread = await message.startThread({

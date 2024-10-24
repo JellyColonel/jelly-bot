@@ -1,9 +1,11 @@
+const PromotionMessageService = require('./promotionMessageService');
 const PromotionService = require('./promotionService');
 const logger = require('../utils/logger');
 
 class SchedulerService {
-  constructor() {
+  constructor(discordClient) {
     this.currentTimer = null;
+    this.client = discordClient; // Store client reference
   }
 
   getNextMidnight() {
@@ -16,7 +18,6 @@ class SchedulerService {
 
   async scheduleNextCheck() {
     try {
-      // Clear any existing timer
       if (this.currentTimer) {
         clearTimeout(this.currentTimer);
       }
@@ -31,12 +32,10 @@ class SchedulerService {
 
       this.currentTimer = setTimeout(async () => {
         await this.processScheduledPromotions();
-        // Schedule next day's check
         this.scheduleNextCheck();
       }, delay);
     } catch (error) {
       logger.error('Error scheduling next check:', error);
-      // Retry in 1 hour if there's an error
       setTimeout(() => this.scheduleNextCheck(), 3600000);
     }
   }
@@ -49,8 +48,24 @@ class SchedulerService {
 
       for (const promotion of scheduledPromotions) {
         try {
-          // Process the scheduled promotion
-          // Implement your promotion sending logic here
+          const guild = await this.client.guilds.fetch(promotion.guildId);
+
+          const promotionMessage =
+            await PromotionMessageService.sendPromotionRequest(
+              guild,
+              promotion.user_id,
+              promotion.from_rank,
+              promotion.to_rank,
+              promotion.report_url
+            );
+
+          await PromotionService.recordPromotion(
+            promotion.user_id,
+            promotion.from_rank,
+            promotion.to_rank,
+            promotionMessage.id
+          );
+
           await PromotionService.markPromotionAsProcessed(promotion.id);
 
           logger.info('Processed scheduled promotion', {
@@ -61,6 +76,7 @@ class SchedulerService {
           logger.error('Failed to process scheduled promotion:', {
             promotionId: promotion.id,
             error: error.message,
+            stack: error.stack,
           });
         }
       }
@@ -69,13 +85,11 @@ class SchedulerService {
     }
   }
 
-  // Call this when bot starts
   start() {
     logger.info('Starting promotion scheduler');
     this.scheduleNextCheck();
   }
 
-  // Call this when bot stops
   stop() {
     if (this.currentTimer) {
       clearTimeout(this.currentTimer);
@@ -85,5 +99,4 @@ class SchedulerService {
   }
 }
 
-const scheduler = new SchedulerService();
-module.exports = scheduler;
+module.exports = SchedulerService;

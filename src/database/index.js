@@ -37,17 +37,19 @@ class DatabaseManager {
 
       // Create table with explicit column types
       this.db.exec(`
-        CREATE TABLE IF NOT EXISTS promotions (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          user_id TEXT NOT NULL,
-          promotion_time TEXT NOT NULL,  -- Changed to TEXT for ISO string
-          from_rank INTEGER NOT NULL,
-          to_rank INTEGER NOT NULL,
-          message_id TEXT NOT NULL,
-          processed INTEGER NOT NULL DEFAULT 0,  -- Changed to INTEGER for SQLite boolean
-          scheduled_for TEXT,  -- Changed to TEXT for ISO string
-          created_at TEXT DEFAULT CURRENT_TIMESTAMP
-        );
+   CREATE TABLE IF NOT EXISTS promotions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT NOT NULL,
+    guild_id TEXT NOT NULL,
+    promotion_time TEXT NOT NULL,
+    from_rank INTEGER NOT NULL,
+    to_rank INTEGER NOT NULL,
+    message_id TEXT NOT NULL,
+    report_url TEXT NOT NULL,
+    processed INTEGER NOT NULL DEFAULT 0,
+    scheduled_for TEXT,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+  );
         
         CREATE INDEX IF NOT EXISTS idx_user_promotions 
         ON promotions(user_id, promotion_time);
