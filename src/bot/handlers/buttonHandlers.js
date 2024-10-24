@@ -76,7 +76,7 @@ class ButtonHandlers {
         });
 
         await thread.send(
-          `${authorField.value}, Вы уже получали одобрение сегодня. ` +
+          `${authorField.value}, как минимум один Ваш отчёт уже был одобрен сегодня. ` +
             `Запрос на следующее повышение будет автоматически отправлен в <t:${Math.floor(scheduledTime.getTime() / 1000)}:F>`
         );
 
@@ -112,7 +112,7 @@ class ButtonHandlers {
       const promotionFormat = [
         `1. <@${authorId}> ${formattedDisplayName}`,
         `2. ${this.formatRoleMention(config.discord.highRanksRole)}`,
-        `3. ${currentRank} - ${newRank}`,
+        `3. ${currentRank}-${newRank}`,
         `4. ${message.url}`,
       ].join('\n');
 
