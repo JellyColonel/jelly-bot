@@ -12,7 +12,9 @@ class ReportService {
       for (const [question, answer] of Object.entries(formData)) {
         let formattedAnswer = answer;
 
-        if (question.toLowerCase().includes('discord id')) {
+        if (
+          question.toLowerCase().includes(config.form.discordIdFieldIdentifier)
+        ) {
           formattedAnswer = `<@${answer}>`;
           logger.detailedInfo(
             `Formatted Discord ID for question "${question}"`,

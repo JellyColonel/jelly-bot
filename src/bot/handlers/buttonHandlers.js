@@ -10,13 +10,13 @@ class ButtonHandlers {
     return new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId('accept_report')
-        .setLabel('Принять')
-        .setEmoji('👍')
+        .setLabel(config.buttons.accept.label)
+        .setEmoji(config.buttons.accept.emoji)
         .setStyle(ButtonStyle.Success),
       new ButtonBuilder()
         .setCustomId('reject_report')
-        .setLabel('Отклонить')
-        .setEmoji('👎')
+        .setLabel(config.buttons.accept.label)
+        .setEmoji(config.buttons.accept.emoji)
         .setStyle(ButtonStyle.Danger)
     );
   }
@@ -32,11 +32,11 @@ class ButtonHandlers {
         userId: interaction.user.id,
       });
 
-      await message.react('✅');
+      await message.react(config.reactions.accept);
 
       // Find author's Discord ID
       const authorField = message.embeds[0].fields.find((field) =>
-        field.name.toLowerCase().includes('discord id')
+        field.name.toLowerCase().includes(config.form.discordIdFieldIdentifier)
       );
 
       if (!authorField) {
@@ -61,20 +61,24 @@ class ButtonHandlers {
       logger.info('Promotion check result', { canPromote });
 
       if (!canPromote) {
-        logger.info('Scheduling delayed promotion', { authorId });
+        logger.info('Scheduling delayed promotion', {
+          userId: authorId,
+          guildId: interaction.guildId,
+          fromRank: currentRank,
+          toRank: newRank,
+          reportUrl: message.url,
+        });
 
-        // Schedule for next day
         const { scheduledTime } = await PromotionService.schedulePromotion(
           authorId,
-          interaction.guildId, // Add guild ID
+          interaction.guildId,
           currentRank,
           newRank,
-          message.url // Add report URL
+          message.url
         );
 
-        logger.info('Creating delay thread');
         const thread = await message.startThread({
-          name: `Отчёт принят и отложен - ${interaction.member.displayName}`,
+          name: `Report Delayed - ${interaction.member.displayName}`,
           autoArchiveDuration: 1440,
         });
 
@@ -114,11 +118,22 @@ class ButtonHandlers {
       );
 
       try {
+        logger.info('Recording promotion with data:', {
+          authorId,
+          currentRank,
+          newRank,
+          messageId: promotionMessage.id,
+          guildId: interaction.guildId,
+          reportUrl: message.url,
+        });
+
         await PromotionService.recordPromotion(
           authorId,
           currentRank,
           newRank,
-          promotionMessage.id
+          promotionMessage.id,
+          interaction.guildId,
+          message.url
         );
       } catch (error) {
         logger.error('Failed to record promotion, but message was sent', {
@@ -271,7 +286,7 @@ class ButtonHandlers {
       const reason = interaction.fields.getTextInputValue('rejection_reason');
 
       // Add rejection reaction
-      await message.react('❌');
+      await message.react(config.reactions.reject);
 
       // Create thread with display name
       const thread = await message.startThread({
@@ -281,7 +296,7 @@ class ButtonHandlers {
 
       // Find author mention
       const authorField = message.embeds[0].fields.find((field) =>
-        field.name.toLowerCase().includes('discord id')
+        field.name.toLowerCase().includes(config.form.discordIdFieldIdentifier)
       );
 
       if (!authorField) {
@@ -350,9 +365,7 @@ class ButtonHandlers {
     try {
       // Find the field containing rank information using config
       const rankField = fields.find((field) =>
-        field.name
-          .toLowerCase()
-          .includes(config.form.rankFieldIdentifier.toLowerCase())
+        field.name.toLowerCase().includes(config.form.rankFieldIdentifier)
       );
 
       if (!rankField) {

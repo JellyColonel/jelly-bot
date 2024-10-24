@@ -86,12 +86,31 @@ const embedConfig = {
 };
 
 const formConfig = {
+  discordIdFieldIdentifier: process.env.DISCORD_ID_FIELD_IDENTIFIER,
   rankFieldIdentifier: process.env.RANK_FIELD_IDENTIFIER,
 };
 
 // Server configuration
 const serverConfig = {
   port: parseInt(process.env.PORT, 10) || 3000,
+};
+
+// Buttons configuration
+
+const buttonsConfig = {
+  accept: {
+    label: process.env.ACCEPT_BUTTON_LABEL || 'Принять',
+    emoji: process.env.ACCEPT_BUTTON_EMOJI || '👍',
+  },
+  reject: {
+    label: process.env.REJECT_BUTTON_LABEL || 'Отклонить',
+    emoji: process.env.REJECT_BUTTON_EMOJI || '👎',
+  },
+};
+
+const reactionsConfig = {
+  accept: process.env.ACCEPT_REACTION_EMOJI || '✅',
+  reject: process.env.REJECT_REACTION_EMOJI || '❌',
 };
 
 // Validate critical configuration
@@ -126,4 +145,6 @@ module.exports = {
   embed: embedConfig,
   roles: roleConfigs,
   form: formConfig,
+  buttons: buttonsConfig,
+  reactions: reactionsConfig,
 };
