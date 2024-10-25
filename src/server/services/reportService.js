@@ -61,9 +61,32 @@ class ReportService {
         });
       }
 
+      // Only add content if provided
+      if (config.embed.content) {
+        embed.content = config.embed.content;
+        logger.detailedInfo('Added content to embed', {
+          content: config.embed.content,
+        });
+      }
+
       const buttons = ButtonHandlers.createReportButtons();
 
-      await channel.send({ embeds: [embed], components: [buttons] });
+      // Create message options
+      const messageOptions = {
+        embeds: [embed],
+        components: [buttons],
+      };
+
+      // Add content if provided
+      if (config.embed.content) {
+        messageOptions.content = config.embed.content;
+        logger.detailedInfo('Added content to message', {
+          content: config.embed.content,
+        });
+      }
+
+      // Send the message with all options
+      await channel.send(messageOptions);
       logger.detailedInfo('Report processed successfully');
       logger.info('Report submitted successfully');
 

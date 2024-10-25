@@ -78,6 +78,7 @@ const discordConfig = {
 
 // Embed configuration with defaults
 const embedConfig = {
+  content: process.env.EMBED_CONTENT || null,
   title: process.env.EMBED_TITLE || 'Отчёт на повышение | Отдел неизвестен',
   url: process.env.EMBER_URL || null,
   color: process.env.EMBED_COLOR,
