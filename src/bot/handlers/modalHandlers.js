@@ -5,55 +5,107 @@ const {
   ActionRowBuilder,
 } = require('discord.js');
 const logger = require('../../utils/logger');
+const config = require('../../config');
+const templateParser = require('../../utils/templateHandler');
 
 class ModalHandlers {
   static createRejectionModal() {
-    const modal = new ModalBuilder()
-      .setCustomId('rejection_reason_modal')
-      .setTitle('Rejection Reason');
+    try {
+      const modal = new ModalBuilder()
+        .setCustomId('rejection_reason_modal')
+        .setTitle(config.rejectModal.title);
 
-    const reasonInput = new TextInputBuilder()
-      .setCustomId('rejection_reason')
-      .setLabel('Please provide detailed reason(s) for rejection')
-      .setStyle(TextInputStyle.Paragraph)
-      .setRequired(true);
+      const reasonInput = new TextInputBuilder()
+        .setCustomId('rejection_reason')
+        .setLabel(config.rejectModal.label) // Shortened label
+        .setStyle(TextInputStyle.Paragraph)
+        .setRequired(true)
+        .setMinLength(10)
+        .setMaxLength(1000)
+        .setPlaceholder(config.rejectModal.placeholder); // Added placeholder for additional context
 
-    const actionRow = new ActionRowBuilder().addComponents(reasonInput);
-    modal.addComponents(actionRow);
+      const actionRow = new ActionRowBuilder().addComponents(reasonInput);
 
-    return modal;
+      modal.addComponents(actionRow);
+
+      return modal;
+    } catch (error) {
+      logger.error('Failed to create modal:', {
+        error: {
+          name: error.name,
+          message: error.message,
+          stack: error.stack,
+        },
+      });
+      throw error;
+    }
   }
 
-  static async handleRejectionSubmission(interaction, message, submission) {
+  static async handleRejectionSubmission(interaction) {
     try {
-      const reason = submission.fields.getTextInputValue('rejection_reason');
-      await message.react('❌');
+      logger.detailedInfo('Processing rejection submission', {
+        user: interaction.user.tag,
+        messageId: interaction.message?.id,
+      });
 
-      // Extract author mention from the embed fields
-      const authorField = message.embeds[0].fields.find(
-        (field) => field.name === 'Author'
-      );
-      const authorMention = authorField.value.split(' ')[0]; // Get the mention part
+      await interaction.deferUpdate();
 
+      const message = interaction.message;
+      const reason = interaction.fields.getTextInputValue('rejection_reason');
+
+      // Add rejection reaction
+      await message.react(config.reactions.reject);
+
+      // Create thread with display name
       const thread = await message.startThread({
-        name: `Report Rejected - ${interaction.user.username}`,
+        name: `${config.messages.report.reject.threadTitle} - ${interaction.member.displayName}`,
         autoArchiveDuration: 1440,
       });
 
-      await thread.send(
-        `${authorMention}, your report has been rejected by ${interaction.user} due to:\n${reason}`
+      // Find author mention
+      const authorField = message.embeds[0].fields.find((field) =>
+        field.name.toLowerCase().includes(config.form.discordIdFieldIdentifier)
       );
 
+      if (!authorField) {
+        throw new Error('Could not find Discord ID field in the report');
+      }
+
+      const authorMention = authorField.value.split(' ')[0];
+
+      // Send rejection message
+      await thread.send(
+        templateParser(config.messages.report.reject.threadMessage, {
+          authorTag: authorMention,
+          rejecter: interaction.user,
+          reason: reason,
+        })
+      );
+
+      // Remove buttons
       await message.edit({ components: [] });
-      await submission.reply({
-        content: 'Rejection processed successfully',
-        ephemeral: true,
-      });
 
       logger.info(`Report rejected by ${interaction.user.tag}`);
     } catch (error) {
-      logger.error('Error handling rejection submission:', error);
-      throw error;
+      logger.error('Error processing rejection:', {
+        error: error.message,
+        stack: error.stack,
+        interactionId: interaction.id,
+        userId: interaction.user.id,
+        messageId: interaction.message?.id,
+      });
+
+      try {
+        await interaction.followUp({
+          content: config.messages.report.reject.failure,
+          ephemeral: true,
+        });
+      } catch (replyError) {
+        logger.error('Failed to send error reply:', {
+          error: replyError.message,
+          stack: replyError.stack,
+        });
+      }
     }
   }
 }

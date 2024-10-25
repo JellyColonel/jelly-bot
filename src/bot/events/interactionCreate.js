@@ -1,8 +1,11 @@
+const { Events } = require('discord.js');
 const ButtonHandlers = require('../handlers/buttonHandlers');
+const ModalHandlers = require('../handlers/modalHandlers');
 const logger = require('../../utils/logger');
+const config = require('../../config');
 
 module.exports = {
-  name: 'interactionCreate',
+  name: Events.InteractionCreate,
   async execute(interaction) {
     try {
       logger.detailedInfo('Received interaction', {
@@ -17,12 +20,12 @@ module.exports = {
         if (!hasPermission) return;
 
         switch (interaction.customId) {
-        case 'accept_report':
-          await ButtonHandlers.handleAcceptReport(interaction);
-          break;
-        case 'reject_report':
-          await ButtonHandlers.handleRejectReport(interaction);
-          break;
+          case 'accept_report':
+            await ButtonHandlers.handleAcceptReport(interaction);
+            break;
+          case 'reject_report':
+            await ButtonHandlers.handleRejectReport(interaction);
+            break;
         }
       }
 
@@ -31,28 +34,20 @@ module.exports = {
         interaction.isModalSubmit() &&
         interaction.customId === 'rejection_reason_modal'
       ) {
-        await ButtonHandlers.handleRejectionSubmission(interaction);
+        await ModalHandlers.handleRejectionSubmission(interaction);
       }
     } catch (error) {
-      logger.error('Error in interaction handler:', {
-        error: error.message,
-        stack: error.stack,
-        interactionType: interaction.type,
-        customId: interaction.customId,
-        userId: interaction.user?.id,
-      });
+      logger.error('Error handling interaction:', error);
 
       try {
         if (!interaction.replied && !interaction.deferred) {
           await interaction.reply({
-            content:
-              'An error occurred while processing your request. Please try again.',
+            content: config.messages.common.error.interaction,
             ephemeral: true,
           });
         } else {
           await interaction.followUp({
-            content:
-              'An error occurred while processing your request. Please try again.',
+            content: config.messages.common.error.interaction,
             ephemeral: true,
           });
         }

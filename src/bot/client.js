@@ -1,7 +1,7 @@
 const { Client, GatewayIntentBits, Events } = require('discord.js');
+const SchedulerService = require('../services/schedulerService');
 const config = require('../config');
 const logger = require('../utils/logger');
-const SchedulerService = require('../services/schedulerService');
 const dbManager = require('../database');
 
 const client = new Client({
@@ -58,7 +58,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
     if (!interaction.replied && !interaction.deferred) {
       await interaction
         .reply({
-          content: 'При обработке вашего запроса произошла ошибка.',
+          content: config.messages.common.error.interaction,
           ephemeral: true,
         })
         .catch((err) => {

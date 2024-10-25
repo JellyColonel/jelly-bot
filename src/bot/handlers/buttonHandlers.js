@@ -1,9 +1,10 @@
-// src/bot/handlers/buttonHandlers.js
 const { ButtonBuilder, ActionRowBuilder, ButtonStyle } = require('discord.js');
+const ModalHandlers = require('./modalHandlers');
 const PromotionService = require('../../services/promotionService');
 const PromotionMessageService = require('../../services/promotionMessageService');
 const config = require('../../config');
 const logger = require('../../utils/logger');
+const templateParser = require('../../utils/templateHandler');
 
 class ButtonHandlers {
   static createReportButtons() {
@@ -15,8 +16,8 @@ class ButtonHandlers {
         .setStyle(ButtonStyle.Success),
       new ButtonBuilder()
         .setCustomId('reject_report')
-        .setLabel(config.buttons.accept.label)
-        .setEmoji(config.buttons.accept.emoji)
+        .setLabel(config.buttons.reject.label)
+        .setEmoji(config.buttons.reject.emoji)
         .setStyle(ButtonStyle.Danger)
     );
   }
@@ -78,19 +79,20 @@ class ButtonHandlers {
         );
 
         const thread = await message.startThread({
-          name: `Report Delayed - ${interaction.member.displayName}`,
+          name: `${config.messages.reportDelayed} - ${interaction.member.displayName}`,
           autoArchiveDuration: 1440,
         });
 
         await thread.send(
-          `${authorField.value}, как минимум один Ваш отчёт уже был одобрен сегодня. ` +
-            `Запрос на следующее повышение будет автоматически отправлен в <t:${Math.floor(scheduledTime.getTime() / 1000)}:F>`
+          templateParser.parse(config.messages.report.delay.threadMessage, {
+            authorTag: authorField.value,
+            timestamp: `<t:${Math.floor(scheduledTime.getTime() / 1000)}:F>`,
+          })
         );
 
         await message.edit({ components: [] });
         await interaction.editReply({
-          content:
-            'Отчёт обработан — запрос на повышение запланирован на следующий день',
+          content: config.messages.report.delay.confirmation,
           ephemeral: true,
         });
 
@@ -108,13 +110,16 @@ class ButtonHandlers {
 
       logger.info('Creating acceptance thread');
       const thread = await message.startThread({
-        name: `Report Accepted - ${interaction.member.displayName}`,
+        name: `${config.messages.reportAccepted} - ${interaction.member.displayName}`,
         autoArchiveDuration: 1440,
       });
 
       await thread.send(
-        `<@${authorId}>, Ваш отчёт был принят ${interaction.user}. ` +
-          `Запрос на Ваше повышение был отправлен в: ${promotionMessage.url}`
+        templateParser.parse(config.messages.report.accept.threadMessage, {
+          authorId: `<@${authorId}>`,
+          accepter: interaction.user,
+          messageUrl: promotionMessage.url,
+        })
       );
 
       try {
@@ -148,7 +153,7 @@ class ButtonHandlers {
 
       logger.info('Sending success reply');
       await interaction.editReply({
-        content: 'Отчёт успешно принят',
+        content: config.messages.report.accept.confirmation,
         ephemeral: true,
       });
     } catch (error) {
@@ -162,8 +167,7 @@ class ButtonHandlers {
 
       try {
         await interaction.editReply({
-          content:
-            'Не удалось одобрить отчёт. Попробуйте снова или свяжитесь с создателем',
+          content: config.messages.report.accept.failure,
           ephemeral: true,
         });
       } catch (replyError) {
@@ -173,8 +177,7 @@ class ButtonHandlers {
         });
         if (!interaction.replied && !interaction.deferred) {
           await interaction.reply({
-            content:
-              'Не удалось одобрить отчёт. Попробуйте снова или свяжитесь с создателем',
+            content: config.messages.report.accept.failure,
             ephemeral: true,
           });
         }
@@ -184,157 +187,11 @@ class ButtonHandlers {
 
   static async handleRejectReport(interaction) {
     try {
-      logger.info('=== Starting Reject Report Process ===');
-
-      logger.detailedInfo('Interaction details:', {
-        user: interaction.user.tag,
-        messageId: interaction.message?.id,
-        channelId: interaction.channelId,
-        guildId: interaction.guildId,
-      });
-
-      logger.info('Creating modal...');
-      const modal = this.createRejectionModal();
-
-      logger.info('Attempting to show modal...');
+      const modal = ModalHandlers.createRejectionModal();
       await interaction.showModal(modal);
-
-      logger.info('Modal shown successfully');
     } catch (error) {
-      const errorDetails = {
-        name: error.name,
-        message: error.message,
-        code: error.code,
-        stack: error.stack,
-        interaction: {
-          id: interaction.id,
-          user: interaction.user?.tag,
-          messageId: interaction.message?.id,
-          channelId: interaction.channelId,
-          guildId: interaction.guildId,
-        },
-      };
-
-      logger.error('Reject report process failed:', errorDetails);
-      console.error('Detailed error:', error); // Temporary console log for immediate debugging
-
-      try {
-        await interaction.reply({
-          content:
-            'Неудалось отобразить форму отказа. Попробуйте снова или обратитесь к создателю.',
-          ephemeral: true,
-        });
-      } catch (replyError) {
-        logger.error('Failed to send error reply:', {
-          name: replyError.name,
-          message: replyError.message,
-          stack: replyError.stack,
-        });
-      }
-    }
-  }
-
-  static createRejectionModal() {
-    try {
-      const {
-        ModalBuilder,
-        TextInputBuilder,
-        TextInputStyle,
-        ActionRowBuilder,
-      } = require('discord.js');
-
-      const modal = new ModalBuilder()
-        .setCustomId('rejection_reason_modal')
-        .setTitle('Причина');
-
-      const reasonInput = new TextInputBuilder()
-        .setCustomId('rejection_reason')
-        .setLabel('Укажите причину отклонения отчёта') // Shortened label
-        .setStyle(TextInputStyle.Paragraph)
-        .setRequired(true)
-        .setMinLength(10)
-        .setMaxLength(1000)
-        .setPlaceholder('Подробно опишите причину для отклонения отчёта'); // Added placeholder for additional context
-
-      const actionRow = new ActionRowBuilder().addComponents(reasonInput);
-
-      modal.addComponents(actionRow);
-
-      return modal;
-    } catch (error) {
-      logger.error('Failed to create modal:', {
-        error: {
-          name: error.name,
-          message: error.message,
-          stack: error.stack,
-        },
-      });
+      logger.error('Error showing rejection modal:', error);
       throw error;
-    }
-  }
-
-  static async handleRejectionSubmission(interaction) {
-    try {
-      logger.detailedInfo('Processing rejection submission', {
-        user: interaction.user.tag,
-        messageId: interaction.message?.id,
-      });
-
-      await interaction.deferUpdate();
-
-      const message = interaction.message;
-      const reason = interaction.fields.getTextInputValue('rejection_reason');
-
-      // Add rejection reaction
-      await message.react(config.reactions.reject);
-
-      // Create thread with display name
-      const thread = await message.startThread({
-        name: `Отчёт отклонён - ${interaction.member.displayName}`,
-        autoArchiveDuration: 1440,
-      });
-
-      // Find author mention
-      const authorField = message.embeds[0].fields.find((field) =>
-        field.name.toLowerCase().includes(config.form.discordIdFieldIdentifier)
-      );
-
-      if (!authorField) {
-        throw new Error('Could not find Discord ID field in the report');
-      }
-
-      const authorMention = authorField.value.split(' ')[0];
-
-      // Send rejection message
-      await thread.send(
-        `${authorMention}, Ваш отчёт был отклонён ${interaction.user} по следующей(-им) причине(-ам):\n\`\`\`\n${reason}\`\`\``
-      );
-
-      // Remove buttons
-      await message.edit({ components: [] });
-
-      logger.info(`Report rejected by ${interaction.user.tag}`);
-    } catch (error) {
-      logger.error('Error processing rejection:', {
-        error: error.message,
-        stack: error.stack,
-        interactionId: interaction.id,
-        userId: interaction.user.id,
-        messageId: interaction.message?.id,
-      });
-
-      try {
-        await interaction.followUp({
-          content:
-            'Не удалось отклонить отчёт. Пожалуйста попробуйте снова или свяжитесь с создателем. ',
-          ephemeral: true,
-        });
-      } catch (replyError) {
-        logger.error('Failed to send error reply:', {
-          error: replyError.message,
-          stack: replyError.stack,
-        });
-      }
     }
   }
 
@@ -349,8 +206,7 @@ class ButtonHandlers {
 
     if (!hasPermission) {
       await interaction.reply({
-        content:
-          'У вас недостаточно прав для использований этой опции, если вы считаете что произошла ошибка, свяжитесь с создателем',
+        content: config.messages.common.error.notEnoughPermissions,
         ephemeral: true,
       });
       logger.warn(

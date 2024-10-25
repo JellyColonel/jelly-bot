@@ -113,6 +113,41 @@ const reactionsConfig = {
   reject: process.env.REJECT_REACTION_EMOJI || '❌',
 };
 
+const messagesConfig = {
+  common: {
+    error: {
+      interaction: process.env.CCOMMON_INTERACTION_ERROR,
+      notEnoughPermissions: process.env.NOT_ENOUGH_PERMISSIONS_ERROR,
+    },
+  },
+  report: {
+    delay: {
+      threadTitle: process.env.REPORT_DELAY_THREAD_TITLE,
+      threadMessage: process.env.REPORT_DELAY_THREAD_MESSAGE,
+      confirmation: process.env.REPORT_DELAY_CONFIRMATION,
+    },
+    accept: {
+      threadTitle: process.env.REPORT_ACCEPT_THREAD_TITLE,
+      threadMessage: process.env.REPORT_ACCEPT_THREAD_MESSAGE,
+      confirmation: process.env.REPORT_ACCEPT_CONFIRMATION,
+      failure: process.env.REPORT_ACCEPT_FAILED,
+    },
+    reject: {
+      threadTitle: process.env.REPORT_REJECT_THREAD_TITLE,
+      threadMessage: process.env.REPORT_REJECT_THREAD_MESSAGE,
+      confirmation: process.env.REPORT_REJECT_CONFIRMATION,
+      failure: process.env.REPORT_REJECT_FAILED,
+    },
+  },
+};
+
+const rejectModalConfig = {
+  title: process.env.REJECT_MODAL_TITLE,
+  label: process.env.REJECT_MODAL_LABEL,
+  placeholder: process.env.REJECT_MODAL_PLACEHOLDER,
+  failure: process.env.REJECT_MODAL_FAILURE,
+};
+
 // Validate critical configuration
 const validateConfig = () => {
   const required = {
@@ -147,4 +182,6 @@ module.exports = {
   form: formConfig,
   buttons: buttonsConfig,
   reactions: reactionsConfig,
+  messages: messagesConfig,
+  rejectModal: rejectModalConfig,
 };
