@@ -79,7 +79,7 @@ class ButtonHandlers {
         );
 
         const thread = await message.startThread({
-          name: `${config.messages.reportDelayed} - ${interaction.member.displayName}`,
+          name: `${config.messages.report.delay.threadTitle} - ${interaction.member.displayName}`,
           autoArchiveDuration: 1440,
         });
 
@@ -110,7 +110,7 @@ class ButtonHandlers {
 
       logger.info('Creating acceptance thread');
       const thread = await message.startThread({
-        name: `${config.messages.reportAccepted} - ${interaction.member.displayName}`,
+        name: `${config.messages.report.accept.threadTitle} - ${interaction.member.displayName}`,
         autoArchiveDuration: 1440,
       });
 

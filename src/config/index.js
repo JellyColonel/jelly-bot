@@ -134,7 +134,6 @@ const messagesConfig = {
     },
     reject: {
       threadTitle: process.env.REPORT_REJECT_THREAD_TITLE,
-      threadMessage: process.env.REPORT_REJECT_THREAD_MESSAGE,
       confirmation: process.env.REPORT_REJECT_CONFIRMATION,
       failure: process.env.REPORT_REJECT_FAILED,
     },

@@ -75,11 +75,7 @@ class ModalHandlers {
 
       // Send rejection message
       await thread.send(
-        templateParser(config.messages.report.reject.threadMessage, {
-          authorTag: authorMention,
-          rejecter: interaction.user,
-          reason: reason,
-        })
+        `${authorMention}, Ваш отчёт был отклонён ${interaction.user} по следующей(-им) причине(-ам):\n\`\`\`\n${reason}\`\`\``
       );
 
       // Remove buttons
