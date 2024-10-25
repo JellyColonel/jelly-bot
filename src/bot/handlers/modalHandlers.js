@@ -6,7 +6,6 @@ const {
 } = require('discord.js');
 const logger = require('../../utils/logger');
 const config = require('../../config');
-const templateParser = require('../../utils/templateHandler');
 
 class ModalHandlers {
   static createRejectionModal() {

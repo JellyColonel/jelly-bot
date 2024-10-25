@@ -1,11 +1,22 @@
-const client = require('../../bot/client');
+const bot = require('../../bot/client');
 const ButtonHandlers = require('../../bot/handlers/buttonHandlers');
 const config = require('../../config');
 const logger = require('../../utils/logger');
 
 class ReportService {
+  // Add a method to check if bot is ready
+  static async ensureBotReady() {
+    if (!bot.isReady()) {
+      logger.info('Bot not ready, initializing...');
+      await bot.start();
+    }
+  }
+
   static async processReport(formData) {
     try {
+      // Ensure bot is ready before processing
+      await this.ensureBotReady();
+
       logger.detailedInfo('Processing form submission', formData);
 
       const fields = [];
@@ -31,9 +42,25 @@ class ReportService {
         });
       }
 
-      const channel = await client.channels.fetch(
-        config.discord.reportsChannelId
-      );
+      // Try to fetch channel with retry logic
+      let channel;
+      try {
+        channel = await bot.channels.fetch(config.discord.reportsChannelId);
+      } catch (error) {
+        logger.error('Failed to fetch channel, retrying...', {
+          channelId: config.discord.reportsChannelId,
+          error: error.message,
+        });
+        // Wait a moment and try again
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        channel = await bot.channels.fetch(config.discord.reportsChannelId);
+      }
+
+      if (!channel) {
+        throw new Error(
+          `Could not find channel with ID ${config.discord.reportsChannelId}`
+        );
+      }
 
       const embed = {
         title: config.embed.title,
@@ -61,14 +88,6 @@ class ReportService {
         });
       }
 
-      // Only add content if provided
-      if (config.embed.content) {
-        embed.content = config.embed.content;
-        logger.detailedInfo('Added content to embed', {
-          content: config.embed.content,
-        });
-      }
-
       const buttons = ButtonHandlers.createReportButtons();
 
       // Create message options
@@ -85,8 +104,22 @@ class ReportService {
         });
       }
 
-      // Send the message with all options
-      await channel.send(messageOptions);
+      // Send the message with retry logic
+      let retries = 3;
+      while (retries > 0) {
+        try {
+          await channel.send(messageOptions);
+          break;
+        } catch (error) {
+          retries--;
+          if (retries === 0) throw error;
+          logger.warn(
+            `Failed to send message, retrying... (${retries} attempts left)`
+          );
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+        }
+      }
+
       logger.detailedInfo('Report processed successfully');
       logger.info('Report submitted successfully');
 

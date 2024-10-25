@@ -1,15 +1,16 @@
 const express = require('express');
 const config = require('../config');
-const logger = require('../utils/logger');
 const reportsRouter = require('./routes/reports');
 
 const app = express();
 
+// Middleware
 app.use(express.json());
+
+// Routes
 app.use('/reports', reportsRouter);
 
-app.listen(config.server.port, () => {
-  logger.info(`Server running on port ${config.server.port}`);
-});
+// Set port in app settings
+app.set('port', config.server.port);
 
 module.exports = app;

@@ -4,107 +4,182 @@ const config = require('../config');
 const logger = require('../utils/logger');
 const dbManager = require('../database');
 
-const client = new Client({
-  intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.GuildMessageReactions,
-  ],
-});
+class DiscordBot extends Client {
+  constructor() {
+    super({
+      intents: [
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildMessages,
+        GatewayIntentBits.GuildMessageReactions,
+      ],
+    });
 
-// Create scheduler instance
-let scheduler = null;
+    this.scheduler = null;
+    this.logger = logger;
+    this.dbManager = dbManager;
 
-// Initialize database before bot starts
-const initServices = async () => {
-  try {
-    logger.info('Initializing services...');
-    await dbManager.init();
-    logger.info('Database initialized');
-  } catch (error) {
-    logger.error('Failed to initialize services:', error);
-    process.exit(1);
+    // Bind methods to preserve 'this' context
+    this.handleInteraction = this.handleInteraction.bind(this);
+    this.handleError = this.handleError.bind(this);
+    this.handleShutdown = this.handleShutdown.bind(this);
   }
-};
 
-client.once(Events.ClientReady, () => {
-  logger.info(`Logged in as ${client.user.tag}`);
+  /**
+   * Initialize bot services and event handlers
+   */
+  async initialize() {
+    try {
+      this.logger.info('Initializing services...');
+      await this.initializeDatabase();
+      await this.registerEventHandlers();
+      await this.registerProcessHandlers();
+      this.logger.info('Services initialized successfully');
+    } catch (error) {
+      this.logger.error('Initialization failed:', error);
+      throw error;
+    }
+  }
 
-  // Initialize scheduler
-  scheduler = new SchedulerService(client);
-  scheduler.start();
-});
+  /**
+   * Initialize database connection
+   */
+  async initializeDatabase() {
+    try {
+      await this.dbManager.init();
+      this.logger.info('Database initialized');
+    } catch (error) {
+      this.logger.error('Database initialization failed:', error);
+      throw error;
+    }
+  }
 
-client.on(Events.Error, (error) => {
-  logger.error('Discord client error:', {
-    error: error.message,
-    stack: error.stack,
-  });
-});
+  /**
+   * Register all Discord.js event handlers
+   */
+  registerEventHandlers() {
+    this.once(Events.ClientReady, this.handleReady.bind(this));
+    this.on(Events.InteractionCreate, this.handleInteraction);
+    this.on(Events.Error, this.handleError);
+  }
 
-// Register the interactionCreate event
-client.on(Events.InteractionCreate, async (interaction) => {
-  try {
-    // Import and execute the interaction handler
-    const interactionHandler = require('./events/interactionCreate');
-    await interactionHandler.execute(interaction);
-  } catch (error) {
-    logger.error('Error handling interaction:', {
+  /**
+   * Register process event handlers for graceful shutdown
+   */
+  registerProcessHandlers() {
+    process.on('SIGINT', this.handleShutdown);
+    process.on('SIGTERM', () => {
+      this.logger.info('Received SIGTERM signal');
+      this.handleShutdown();
+    });
+  }
+
+  /**
+   * Handle client ready event
+   */
+  handleReady() {
+    this.logger.info(`Logged in as ${this.user.tag}`);
+    this.initializeScheduler();
+  }
+
+  /**
+   * Initialize and start the scheduler
+   */
+  initializeScheduler() {
+    try {
+      this.scheduler = new SchedulerService(this);
+      this.scheduler.start();
+      this.logger.info('Scheduler initialized and started');
+    } catch (error) {
+      this.logger.error('Failed to initialize scheduler:', error);
+    }
+  }
+
+  /**
+   * Handle interaction events
+   */
+  async handleInteraction(interaction) {
+    try {
+      const interactionHandler = require('./events/interactionCreate');
+      await interactionHandler.execute(interaction);
+    } catch (error) {
+      await this.handleInteractionError(interaction, error);
+    }
+  }
+
+  /**
+   * Handle interaction errors
+   */
+  async handleInteractionError(interaction, error) {
+    this.logger.error('Error handling interaction:', {
+      error: error.message,
+      stack: error.stack,
+      interactionType: interaction.type,
+      commandName: interaction.commandName,
+    });
+
+    if (!interaction.replied && !interaction.deferred) {
+      try {
+        await interaction.reply({
+          content: config.messages.common.error.interaction,
+          ephemeral: true,
+        });
+      } catch (replyError) {
+        this.logger.error('Failed to send error reply:', replyError);
+      }
+    }
+  }
+
+  /**
+   * Handle client errors
+   */
+  handleError(error) {
+    this.logger.error('Discord client error:', {
       error: error.message,
       stack: error.stack,
     });
+  }
 
-    // Ensure we reply to the interaction
-    if (!interaction.replied && !interaction.deferred) {
-      await interaction
-        .reply({
-          content: config.messages.common.error.interaction,
-          ephemeral: true,
-        })
-        .catch((err) => {
-          logger.error('Failed to send error reply:', err);
-        });
+  /**
+   * Handle graceful shutdown
+   */
+  async handleShutdown() {
+    this.logger.info('Initiating graceful shutdown...');
+
+    try {
+      if (this.scheduler) {
+        await this.scheduler.stop();
+        this.logger.info('Scheduler stopped');
+      }
+
+      await this.dbManager.close();
+      this.logger.info('Database connection closed');
+
+      await this.destroy();
+      this.logger.info('Discord client destroyed');
+
+      process.exit(0);
+    } catch (error) {
+      this.logger.error('Error during shutdown:', error);
+      process.exit(1);
     }
   }
-});
 
-// Graceful shutdown handler
-process.on('SIGINT', async () => {
-  logger.info('Shutting down...');
-
-  // Stop the scheduler if it exists
-  if (scheduler) {
-    scheduler.stop();
+  /**
+   * Start the bot
+   */
+  async start() {
+    try {
+      await this.initialize();
+      await this.login(config.discord.token);
+      this.logger.info('Bot started successfully');
+    } catch (error) {
+      this.logger.error('Failed to start bot:', error);
+      process.exit(1);
+    }
   }
+}
 
-  // Close database connection
-  await dbManager.close();
+const bot = new DiscordBot();
 
-  // Destroy the client
-  client.destroy();
-
-  logger.info('Cleanup completed');
-  process.exit(0);
-});
-
-// Optional: Handle other termination signals
-process.on('SIGTERM', async () => {
-  logger.info('Received SIGTERM signal');
-  process.emit('SIGINT');
-});
-
-// Start bot and services
-const startBot = async () => {
-  try {
-    await initServices();
-    await client.login(config.discord.token);
-    logger.info('Bot logged in successfully');
-  } catch (error) {
-    logger.error('Failed to start bot:', error);
-    process.exit(1);
-  }
-};
-
-startBot();
-
-module.exports = client;
+// Export the initialized bot
+module.exports = bot;

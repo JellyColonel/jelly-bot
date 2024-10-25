@@ -1,84 +1,87 @@
 require('dotenv').config();
 const logger = require('../utils/logger');
 
-/**
- * Validates and formats a Discord role ID
- * @param {string} roleId
- * @returns {string|null}
- */
-const validateRoleId = (roleId) => {
-  if (!roleId) return null;
-  const cleaned = roleId.trim();
-  return cleaned.length > 0 ? cleaned : null;
-};
+const parseRoleList = (roleString, roleConfigs, options = {}) => {
+  const { delimiter = ',', allowUnresolved = false, prefix = '@' } = options;
 
-/**
- * Processes role references and returns resolved role IDs
- * @param {string} roleIdsString - Comma-separated role IDs or references
- * @param {Object} allRoles - Available role configurations
- * @returns {string[]}
- */
-const parseRoleIds = (roleIdsString, allRoles = {}) => {
-  if (!roleIdsString) {
-    logger.warn('No role IDs provided');
+  if (!roleString) {
+    logger.warn('Empty role string provided');
     return [];
   }
 
-  return roleIdsString
-    .split(',')
-    .map((item) => item.trim())
-    .reduce((acc, item) => {
-      if (item.startsWith('@')) {
-        const refKey = item.slice(1);
-        const referencedRoles = allRoles[refKey];
+  try {
+    return roleString
+      .split(delimiter)
+      .map((item) => item.trim())
+      .filter((item) => item.length > 0)
+      .map((item) => {
+        const roleKey = item.startsWith(prefix)
+          ? item.slice(prefix.length)
+          : item;
+        const resolvedRole = roleConfigs[roleKey];
 
-        if (referencedRoles) {
-          const resolvedRoles = Array.isArray(referencedRoles)
-            ? referencedRoles
-            : [referencedRoles];
-
-          logger.info(`Resolved role reference: @${refKey}`, {
-            resolved: resolvedRoles,
-          });
-
-          return acc.concat(resolvedRoles);
+        if (resolvedRole) {
+          logger.info(`Resolved role: ${roleKey} -> ${resolvedRole}`);
+          return resolvedRole;
         }
 
-        logger.warn(`Referenced role not found: ${refKey}`);
-        return acc;
+        logger.warn(`Unable to resolve role: ${roleKey}`);
+        return allowUnresolved ? item : null;
+      })
+      .filter((id) => id && id.length > 0);
+  } catch (error) {
+    logger.error('Error parsing role list:', error);
+    return [];
+  }
+};
+
+const processRoleReferences = (content, roleConfigs, delimiter = ' ') => {
+  if (!content) return null;
+
+  return content
+    .split(delimiter)
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0)
+    .map((item) => {
+      const roleKey = item.startsWith('@') ? item.slice(1) : item;
+      const roleId = roleConfigs[roleKey];
+
+      if (roleId) {
+        logger.info(`Resolved role mention: ${roleKey} -> ${roleId}`);
+        // Format as proper Discord role mention
+        return `<@&${roleId}>`;
       }
 
-      return acc.concat(item);
-    }, [])
-    .filter((id) => {
-      const isValid = id && id.length > 0;
-      if (!isValid) {
-        logger.warn(`Invalid role ID found: ${id}`);
-      }
-      return isValid;
-    });
+      logger.warn(`Role not found: ${roleKey}`);
+      return item;
+    })
+    .join(' '); // Join with space to create proper string
 };
 
 // Role configurations
 const roleConfigs = {
-  SENIOR_STAFF_ROLE_ID: validateRoleId(process.env.SENIOR_STAFF_ROLE_ID),
-  FD_CURATOR_ROLE_ID: validateRoleId(process.env.FD_CURATOR_ROLE_ID),
-  FD_HEAD_ROLE_ID: validateRoleId(process.env.FD_HEAD_ROLE_ID),
-  FD_DEP_HEAD_ROLE_ID: validateRoleId(process.env.FD_DEP_HEAD_ROLE_ID),
+  SENIOR_STAFF_ROLE_ID: process.env.SENIOR_STAFF_ROLE_ID,
+  FD_CURATOR_ROLE_ID: process.env.FD_CURATOR_ROLE_ID,
+  FD_HEAD_ROLE_ID: process.env.FD_HEAD_ROLE_ID,
+  FD_DEP_HEAD_ROLE_ID: process.env.FD_DEP_HEAD_ROLE_ID,
 };
 
 // Discord-specific configuration
 const discordConfig = {
   token: process.env.DISCORD_TOKEN,
   reportsChannelId: process.env.REPORTS_CHANNEL_ID,
-  requiredRoleIds: parseRoleIds(process.env.REQUIRED_ROLE_IDS, roleConfigs),
-  highRanksRole: validateRoleId(process.env.SENIOR_STAFF_ROLE_ID),
+  requiredRoleIds: parseRoleList(process.env.REQUIRED_ROLE_IDS, roleConfigs, {
+    delimiter: ',',
+    allowUnresolved: false,
+  }),
+  highRanksRole: process.env.SENIOR_STAFF_ROLE_ID,
   promotionChannelId: process.env.PROMOTION_CHANNEL_ID,
 };
 
 // Embed configuration with defaults
 const embedConfig = {
-  content: process.env.EMBED_CONTENT || null,
+  content:
+    processRoleReferences(process.env.EMBED_CONTENT, roleConfigs) || null,
   title: process.env.EMBED_TITLE || 'Отчёт на повышение | Отдел неизвестен',
   url: process.env.EMBER_URL || null,
   color: process.env.EMBED_COLOR,
