@@ -138,6 +138,7 @@ const messagesConfig = {
     },
     reject: {
       threadTitle: process.env.REPORT_REJECT_THREAD_TITLE,
+      threadMessage: '${authorMention}, Ваш отчёт был отклонён ${rejector} по следующим причинам:\n```\n${reason}\n```',
       confirmation: process.env.REPORT_REJECT_CONFIRMATION,
       failure: process.env.REPORT_REJECT_FAILED,
     },

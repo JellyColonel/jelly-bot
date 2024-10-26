@@ -25,7 +25,6 @@ class ButtonHandlers {
   static async handleAcceptReport(interaction) {
     try {
       await interaction.deferReply({ ephemeral: true });
-
       const message = interaction.message;
 
       logger.info('Starting accept report process', {
@@ -33,155 +32,263 @@ class ButtonHandlers {
         userId: interaction.user.id,
       });
 
-      await message.react(config.reactions.accept);
-
-      // Find author's Discord ID
-      const authorField = message.embeds[0].fields.find((field) =>
-        field.name.toLowerCase().includes(config.form.discordIdFieldIdentifier)
-      );
-
-      if (!authorField) {
-        logger.error('Discord ID field not found', {
-          availableFields: message.embeds[0].fields.map((f) => f.name),
-        });
-        throw new Error('Could not find Discord ID field in the report');
+      // Validate message has embeds
+      if (!message.embeds?.length) {
+        throw new Error('No embeds found in the message');
       }
 
-      const authorId = authorField.value.split(' ')[0].replace(/[<@>]/g, '');
+      // Add acceptance reaction
+      await message.react(config.reactions.accept);
+
+      // Extract author information and rank numbers using class methods
+      const authorId = ButtonHandlers.extractAuthorId(message);
       logger.info('Found author ID', { authorId });
 
-      logger.info('Starting rank extraction');
-      const { currentRank, newRank } = this.extractRankNumbers(
-        message.embeds[0].fields
-      );
+      const { currentRank, newRank } = ButtonHandlers.extractRankNumbers(message.embeds[0].fields);
       logger.info('Extracted ranks', { currentRank, newRank });
 
-      // Log before promotion check
-      logger.info('Checking promotion eligibility', { authorId });
+      // Check promotion eligibility
       const canPromote = await PromotionService.canPromote(authorId);
       logger.info('Promotion check result', { canPromote });
 
       if (!canPromote) {
-        logger.info('Scheduling delayed promotion', {
-          userId: authorId,
-          guildId: interaction.guildId,
-          fromRank: currentRank,
-          toRank: newRank,
-          reportUrl: message.url,
-        });
-
-        const { scheduledTime } = await PromotionService.schedulePromotion(
+        await ButtonHandlers.handleDelayedPromotion(
+          interaction,
+          message,
           authorId,
-          interaction.guildId,
           currentRank,
-          newRank,
-          message.url
+          newRank
         );
-
-        const thread = await message.startThread({
-          name: `${config.messages.report.delay.threadTitle} - ${interaction.member.displayName}`,
-          autoArchiveDuration: 1440,
-        });
-
-        await thread.send(
-          templateParser.parse(config.messages.report.delay.threadMessage, {
-            authorTag: authorField.value,
-            timestamp: `<t:${Math.floor(scheduledTime.getTime() / 1000)}:F>`,
-          })
-        );
-
-        await message.edit({ components: [] });
-        await interaction.editReply({
-          content: config.messages.report.delay.confirmation,
-          ephemeral: true,
-        });
-
         return;
       }
 
-      const promotionMessage =
-        await PromotionMessageService.sendPromotionRequest(
-          interaction.guild,
-          authorId,
-          currentRank,
-          newRank,
-          message.url
-        );
-
-      logger.info('Creating acceptance thread');
-      const thread = await message.startThread({
-        name: `${config.messages.report.accept.threadTitle} - ${interaction.member.displayName}`,
-        autoArchiveDuration: 1440,
-      });
-
-      await thread.send(
-        templateParser.parse(config.messages.report.accept.threadMessage, {
-          authorId: `<@${authorId}>`,
-          accepter: interaction.user,
-          messageUrl: promotionMessage.url,
-        })
+      await ButtonHandlers.handleImmediatePromotion(
+        interaction,
+        message,
+        authorId,
+        currentRank,
+        newRank
       );
 
-      try {
-        logger.info('Recording promotion with data:', {
-          authorId,
-          currentRank,
-          newRank,
-          messageId: promotionMessage.id,
-          guildId: interaction.guildId,
-          reportUrl: message.url,
-        });
-
-        await PromotionService.recordPromotion(
-          authorId,
-          currentRank,
-          newRank,
-          promotionMessage.id,
-          interaction.guildId,
-          message.url
-        );
-      } catch (error) {
-        logger.error('Failed to record promotion, but message was sent', {
-          error: error.message,
-          promotionMessageId: promotionMessage.id,
-        });
-        // Continue execution even if recording fails
-      }
-
-      logger.info('Cleaning up message components');
-      await message.edit({ components: [] });
-
-      logger.info('Sending success reply');
-      await interaction.editReply({
-        content: config.messages.report.accept.confirmation,
-        ephemeral: true,
-      });
     } catch (error) {
       logger.error('Error handling accept report:', {
-        error: error.message,
+        error: error.message || 'Unknown error occurred',
         stack: error.stack,
         interactionId: interaction.id,
         userId: interaction.user?.id,
         messageId: interaction.message?.id,
       });
 
+      const errorMessage = error.message || config.messages.report.accept.failure;
+      
       try {
-        await interaction.editReply({
-          content: config.messages.report.accept.failure,
-          ephemeral: true,
-        });
+        if (interaction.deferred) {
+          await interaction.editReply({
+            content: errorMessage,
+            ephemeral: true,
+          });
+        } else {
+          await interaction.reply({
+            content: errorMessage,
+            ephemeral: true,
+          });
+        }
       } catch (replyError) {
         logger.error('Failed to send error reply:', {
           error: replyError.message,
           stack: replyError.stack,
+          originalError: error.message
         });
-        if (!interaction.replied && !interaction.deferred) {
-          await interaction.reply({
-            content: config.messages.report.accept.failure,
-            ephemeral: true,
-          });
-        }
       }
+    }
+  }
+
+  static async handleDelayedPromotion(
+    interaction,
+    message,
+    authorId,
+    currentRank,
+    newRank
+  ) {
+    logger.info('Scheduling delayed promotion', {
+      userId: authorId,
+      guildId: interaction.guildId,
+      fromRank: currentRank,
+      toRank: newRank,
+      reportUrl: message.url,
+    });
+
+    const { scheduledTime } = await PromotionService.schedulePromotion(
+      authorId,
+      interaction.guildId,
+      currentRank,
+      newRank,
+      message.url
+    );
+
+    // Create delay notification thread
+    const thread = await message.startThread({
+      name: `${config.messages.report.delay.threadTitle} - ${interaction.member.displayName}`,
+      autoArchiveDuration: 1440,
+    });
+
+    const authorField = message.embeds[0].fields.find(field =>
+      field.name.toLowerCase().includes(config.form.discordIdFieldIdentifier)
+    );
+
+    await thread.send(
+      templateParser.parse(config.messages.report.delay.threadMessage, {
+        authorTag: authorField.value,
+        timestamp: `<t:${Math.floor(scheduledTime.getTime() / 1000)}:F>`,
+      })
+    );
+
+    // Cleanup and confirm
+    await message.edit({ components: [] });
+    await interaction.editReply({
+      content: config.messages.report.delay.confirmation,
+      ephemeral: true,
+    });
+  }
+
+  static async handleImmediatePromotion(
+    interaction,
+    message,
+    authorId,
+    currentRank,
+    newRank
+  ) {
+    // Send promotion request with immediate flag and approver info
+    const promotionMessage = await PromotionMessageService.sendPromotionRequest(
+      interaction.guild,
+      authorId,
+      currentRank,
+      newRank,
+      message.url,
+      {
+        immediate: true,
+        approverTag: interaction.user.tag
+      }
+    );
+
+    // Create acceptance thread
+    const thread = await message.startThread({
+      name: `${config.messages.report.accept.threadTitle} - ${interaction.member.displayName}`,
+      autoArchiveDuration: 1440,
+    });
+
+    await thread.send(
+      templateParser.parse(config.messages.report.accept.threadMessage, {
+        authorId: `<@${authorId}>`,
+        accepter: interaction.user,
+        messageUrl: promotionMessage.url,
+      })
+    );
+
+    // Record the promotion
+    try {
+      logger.info('Recording promotion', {
+        authorId,
+        currentRank,
+        newRank,
+        messageId: promotionMessage.id,
+        guildId: interaction.guildId,
+        reportUrl: message.url,
+      });
+
+      await PromotionService.recordPromotion(
+        authorId,
+        currentRank,
+        newRank,
+        promotionMessage.id,
+        interaction.guildId,
+        message.url
+      );
+    } catch (error) {
+      logger.error('Failed to record promotion, but message was sent', {
+        error: error.message,
+        promotionMessageId: promotionMessage.id,
+      });
+      // Continue execution even if recording fails
+    }
+
+    // Cleanup and confirm
+    await message.edit({ components: [] });
+    await interaction.editReply({
+      content: config.messages.report.accept.confirmation,
+      ephemeral: true,
+    });
+  }
+
+  static extractAuthorId(message) {
+    if (!message.embeds?.[0]?.fields) {
+      throw new Error('Invalid report format: No fields found in embed');
+    }
+
+    const authorField = message.embeds[0].fields.find((field) =>
+      field.name.toLowerCase().includes(config.form.discordIdFieldIdentifier)
+    );
+
+    if (!authorField) {
+      logger.error('Discord ID field not found', {
+        availableFields: message.embeds[0].fields.map((f) => f.name),
+      });
+      throw new Error('Could not find Discord ID field in the report');
+    }
+
+    const authorId = authorField.value.split(' ')[0].replace(/[<@>]/g, '');
+    
+    if (!authorId) {
+      throw new Error('Invalid Discord ID format in report');
+    }
+
+    return authorId;
+  }
+
+  static extractRankNumbers(fields) {
+    if (!Array.isArray(fields)) {
+      throw new Error('Invalid report format: Fields must be an array');
+    }
+
+    try {
+      const rankField = fields.find((field) =>
+        field.name.toLowerCase().includes(config.form.rankFieldIdentifier)
+      );
+
+      if (!rankField) {
+        logger.error('Rank field not found in embed', {
+          searchIdentifier: config.form.rankFieldIdentifier,
+          availableFields: fields.map((f) => f.name),
+        });
+        throw new Error('Could not find rank information in the report');
+      }
+
+      const numbers = rankField.value.match(/\[(\d+)\]/g);
+
+      if (!numbers || numbers.length !== 2) {
+        logger.error('Invalid rank format', {
+          value: rankField.value,
+          numbersFound: numbers?.length || 0
+        });
+        throw new Error('Invalid rank format in report');
+      }
+
+      const currentRank = numbers[0].replace(/[^\d]/g, '');
+      const newRank = numbers[1].replace(/[^\d]/g, '');
+
+      if (!currentRank || !newRank) {
+        throw new Error('Invalid rank numbers in report');
+      }
+
+      return { currentRank, newRank };
+    } catch (error) {
+      logger.error('Error extracting rank numbers:', {
+        error: error.message,
+        stack: error.stack,
+        fieldsProvided: fields?.length || 0,
+        fieldNames: fields?.map((f) => f.name) || [],
+      });
+      throw error;
     }
   }
 
@@ -193,10 +300,6 @@ class ButtonHandlers {
       logger.error('Error showing rejection modal:', error);
       throw error;
     }
-  }
-
-  static formatRoleMention(roleId) {
-    return `<@&${roleId}>`;
   }
 
   static async checkPermission(interaction) {
@@ -215,95 +318,6 @@ class ButtonHandlers {
     }
 
     return hasPermission;
-  }
-
-  static extractRankNumbers(fields) {
-    try {
-      // Find the field containing rank information using config
-      const rankField = fields.find((field) =>
-        field.name.toLowerCase().includes(config.form.rankFieldIdentifier)
-      );
-
-      if (!rankField) {
-        logger.error('Rank field not found in embed', {
-          searchIdentifier: config.form.rankFieldIdentifier,
-          availableFields: fields.map((f) => f.name),
-        });
-        throw new Error('Could not find rank information in the report');
-      }
-
-      logger.info('Found rank field', {
-        fieldName: rankField.name,
-        value: rankField.value,
-        matchedIdentifier: config.form.rankFieldIdentifier,
-      });
-
-      // Extract numbers between square brackets
-      logger.info('Attempting to extract numbers from value', {
-        value: rankField.value,
-      });
-      const numbers = rankField.value.match(/\[(\d+)\]/g);
-
-      if (!numbers) {
-        logger.error('No numbers found in brackets', {
-          value: rankField.value,
-        });
-        throw new Error('No rank numbers found in report');
-      }
-
-      if (numbers.length !== 2) {
-        logger.error('Incorrect number of ranks found', {
-          found: numbers.length,
-          numbers,
-          value: rankField.value,
-        });
-        throw new Error('Invalid rank format - expected two numbers');
-      }
-
-      // Extract just the numbers from "[X]" format
-      const currentRank = numbers[0].replace(/[^\d]/g, '');
-      const newRank = numbers[1].replace(/[^\d]/g, '');
-
-      logger.info('Successfully extracted ranks', {
-        currentRank,
-        newRank,
-        originalValue: rankField.value,
-        numbers,
-      });
-
-      return { currentRank, newRank };
-    } catch (error) {
-      logger.error('Error extracting rank numbers:', {
-        error: error.message,
-        stack: error.stack,
-        fieldsProvided: fields.length,
-        fieldNames: fields.map((f) => f.name),
-      });
-      throw error;
-    }
-  }
-
-  static formatDisplayName(displayName) {
-    try {
-      // Match department pattern: any characters (including dots) followed by " | "
-      const departmentRegex = /^[A-Za-z.]+\s+\|\s+/;
-
-      // Remove department prefix
-      const nameWithoutDepartment = displayName.replace(departmentRegex, '');
-
-      logger.detailedInfo('Formatted display name', {
-        original: displayName,
-        formatted: nameWithoutDepartment,
-      });
-
-      return nameWithoutDepartment;
-    } catch (error) {
-      logger.error('Error formatting display name:', {
-        error: error.message,
-        displayName,
-      });
-      return displayName; // Return original name if formatting fails
-    }
   }
 }
 

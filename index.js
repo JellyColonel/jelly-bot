@@ -7,7 +7,6 @@ const logger = require('./src/utils/logger');
   try {
     // Initialize and start the bot
     await bot.start();
-    logger.info('Bot started successfully');
 
     // Start the Express server
     app.listen(config.server.port, () => {
